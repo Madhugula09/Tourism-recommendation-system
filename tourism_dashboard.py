@@ -44,217 +44,213 @@ def load_data():
 
 # ---------- Data Preprocessing ----------
 def preprocess_data(df):
-    df = df.dropna()
+    df = df.dropna().copy()
     for col in ['visitmode', 'attraction']:
         df[col] = LabelEncoder().fit_transform(df[col])
     return df
 
-# ---------- Streamlit UI ----------
-st.title("🏞️ Tourism Experience Dashboard")
+# ---------- Streamlit UI Setup ----------
+st.set_page_config(page_title="Tourism Experience Dashboard", layout="wide")
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", ["Home", "EDA", "Regression", "Classification", "Recommendation", "Insights"])
 
+# Load and preprocess data
 df = load_data()
-st.subheader("Raw Data")
-st.dataframe(df.head())
-
-# Cleaned Data
 df_clean = preprocess_data(df)
-st.subheader("Cleaned Data")
-st.dataframe(df_clean.head())
+
+# ---------- HOME PAGE ----------
+if page == "Home":
+    st.title("🏞️ Tourism Experience Dashboard")
+    st.subheader("Raw Data Sample")
+    st.dataframe(df.head())
+    st.subheader("Cleaned Data Sample")
+    st.dataframe(df_clean.head())
+    st.markdown("This project provides classification, prediction, and recommendation insights into tourist behavior using historical data.")
 
 # ---------- EDA ----------
-st.header("📊 Exploratory Data Analysis")
+elif page == "EDA":
+    st.title("📊 Exploratory Data Analysis")
 
-# Visit Mode Distribution
-st.subheader("Visit Mode Distribution")
-st.bar_chart(df['visitmode'].value_counts())
+    with st.expander("Filter Data (optional)"):
+        years = sorted(df['visityear'].dropna().unique())
+        selected_years = st.multiselect("Visit Year(s)", years, default=years)
+        regions = sorted(df['regionid'].dropna().unique())
+        selected_regions = st.multiselect("Region ID(s)", regions, default=regions)
+        cities = sorted(df['cityid'].dropna().unique())
+        selected_cities = st.multiselect("City ID(s)", cities, default=cities)
+        attraction_types = sorted(df['attractiontypeid'].dropna().unique())
+        selected_attraction_types = st.multiselect("Attraction Type ID(s)", attraction_types, default=attraction_types)
 
-# Region-wise Popular Attractions
-st.subheader("Top Attractions by Region")
-top_attractions = df.groupby(['regionid', 'attraction']).size().reset_index(name='count')
-top_5 = top_attractions.sort_values(['regionid', 'count'], ascending=[True, False]).groupby('regionid').head(5)
-st.dataframe(top_5)
+    filtered_df = df[
+        (df['visityear'].isin(selected_years)) &
+        (df['regionid'].isin(selected_regions)) &
+        (df['cityid'].isin(selected_cities)) &
+        (df['attractiontypeid'].isin(selected_attraction_types))
+    ]
 
-# City-wise Visit Mode
-st.subheader("Visit Mode Trends by City")
-visit_mode_by_city = df.groupby(['cityid', 'visitmode']).size().unstack().fillna(0)
-st.bar_chart(visit_mode_by_city)
+    if filtered_df.empty:
+        st.warning("No data available for the selected filters.")
+    else:
+        st.subheader("Overview Metrics")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Transactions", filtered_df.shape[0])
+        col2.metric("Unique Users", filtered_df['userid'].nunique())
+        col3.metric("Unique Attractions", filtered_df['attraction'].nunique())
+        col4.metric("Average Rating", f"{filtered_df['rating'].mean():.2f}")
 
-# Correlation
-st.subheader("Feature Correlation Heatmap")
-corr = df_clean.corr()
-fig, ax = plt.subplots()
-sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
-st.pyplot(fig)
+        st.subheader("Rating Distribution")
+        fig, ax = plt.subplots()
+        sns.histplot(filtered_df['rating'], bins=5, kde=True, ax=ax)
+        st.pyplot(fig)
 
-# ---------- Exploratory Data Analysis ----------
-st.header("📊 Exploratory Data Analysis")
+        st.subheader("Visit Mode Distribution")
+        fig, ax = plt.subplots()
+        filtered_df['visitmode'].value_counts().plot(kind='bar', ax=ax, color='skyblue')
+        st.pyplot(fig)
 
-# Overview metrics
-st.subheader("🔢 Overview Metrics")
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Transactions", df.shape[0])
-col2.metric("Unique Users", df['transactionid'].nunique())
-col3.metric("Unique Attractions", df['attraction'].nunique())
-col4.metric("Average Rating", f"{df['rating'].mean():.2f}")
+        st.subheader("Top Attractions")
+        top_attractions = filtered_df['attraction'].value_counts().head(10)
+        st.bar_chart(top_attractions)
 
-# Rating Distribution
-st.subheader("⭐ Rating Distribution")
-fig1, ax1 = plt.subplots()
-sns.histplot(df['rating'], bins=5, kde=True, ax=ax1)
-st.pyplot(fig1)
+        st.subheader("Visits by Region")
+        st.bar_chart(filtered_df['regionid'].value_counts().head(10))
 
-# Visit Mode Analysis
-st.subheader("🚶‍♂️ Visit Mode Distribution")
-fig2, ax2 = plt.subplots()
-df['visitmode'].value_counts().plot(kind='bar', color='skyblue', ax=ax2)
-ax2.set_xlabel("Visit Mode")
-ax2.set_ylabel("Count")
-st.pyplot(fig2)
+        st.subheader("City-wise Visit Count")
+        st.bar_chart(filtered_df['cityid'].value_counts().head(10))
 
-# Attraction Popularity
-st.subheader("🏖️ Most Visited Attractions")
-top_attractions = df['attraction'].value_counts().head(10)
-st.bar_chart(top_attractions)
+        st.subheader("Yearly Visit Trends")
+        yearly = filtered_df.groupby('visityear').size()
+        st.line_chart(yearly)
 
-# Region-wise Visits
-st.subheader("🗺️ Visits by Region")
-region_counts = df['regionid'].value_counts().head(10)
-fig3, ax3 = plt.subplots()
-region_counts.plot(kind='bar', color='green', ax=ax3)
-ax3.set_xlabel("Region ID")
-ax3.set_ylabel("Number of Visits")
-st.pyplot(fig3)
+        st.subheader("Monthly Visit Trends")
+        monthly = filtered_df.groupby('visitmonth').size().sort_index()
+        st.line_chart(monthly)
 
-# City-wise Analysis
-st.subheader("🏙️ City-wise Visit Count")
-city_counts = df['cityid'].value_counts().head(10)
-fig4, ax4 = plt.subplots()
-city_counts.plot(kind='bar', color='orange', ax=ax4)
-ax4.set_xlabel("City ID")
-ax4.set_ylabel("Number of Visits")
-st.pyplot(fig4)
+        st.subheader("Feature Correlation Heatmap")
+        corr_df = preprocess_data(filtered_df)
+        fig, ax = plt.subplots()
+        sns.heatmap(corr_df.corr(), annot=True, cmap="coolwarm", ax=ax)
+        st.pyplot(fig)
 
-# Yearly Trends
-st.subheader("📆 Yearly Visit Trends")
-yearly = df.groupby('visityear').size()
-st.line_chart(yearly)
 
-# Monthly Trends
-st.subheader("🗓️ Monthly Visit Trends")
-monthly = df.groupby('visitmonth').size().sort_index()
-st.line_chart(monthly)
+# ---------- REGRESSION ----------
 
-# ---------- Regression Model ----------
-st.header("📈 Regression: Predict Rating")
-features_reg = st.multiselect("Select features for regression:", df_clean.columns.drop(['transactionid', 'rating']), default=['visityear', 'visitmonth', 'attractiontypeid'])
+elif page == "Regression":
+    st.title("📈 Predict Ratings with Regression")
+    features_reg = st.multiselect("Select features:", df_clean.columns.drop(['transactionid', 'rating']), default=['visityear', 'visitmonth', 'attractiontypeid'])
 
-if st.button("Train Regression Model"):
-    X = df_clean[features_reg]
-    y = df_clean['rating']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = RandomForestRegressor()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    st.write("MAE:", mean_absolute_error(y_test, y_pred))
-    st.write("R2 Score:", r2_score(y_test, y_pred))
+    if st.button("Train Regression Model"):
+        X = df_clean[features_reg]
+        y = df_clean['rating']
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model = RandomForestRegressor()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        st.success("Model trained successfully.")
+        st.write("MAE:", mean_absolute_error(y_test, y_pred))
+        st.write("R²:", r2_score(y_test, y_pred))
 
-# ---------- Classification Model ----------
-st.header("📌 Classification: High/Low Rating")
-thresh = st.slider("Rating Threshold (>= High):", 1, 5, 3)
-df_clean['rating_class'] = (df_clean['rating'] >= thresh).astype(int)
-features_cls = st.multiselect("Select features for classification:", df_clean.columns.drop(['transactionid', 'rating', 'rating_class']), default=['visitmonth', 'attractiontypeid'])
 
-if st.button("Train Classification Model"):
-    X = df_clean[features_cls]
-    y = df_clean['rating_class']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = LogisticRegression()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    st.write("Accuracy:", accuracy_score(y_test, y_pred))
-    st.text(classification_report(y_test, y_pred))
+elif page == "Classification":
+    st.title("📌 Classify High/Low Ratings")
+    threshold = st.slider("Rating Threshold (>= High):", 1, 5, 3)
+    df_clean['rating_class'] = (df_clean['rating'] >= threshold).astype(int)
+    features_cls = st.multiselect("Select features:", df_clean.columns.drop(['transactionid', 'rating', 'rating_class']), default=['visitmonth', 'attractiontypeid'])
 
-# ---------- Visit Mode Prediction ----------
-st.header("🤖 Predict Visit Mode")
-features_vm = ['visityear', 'visitmonth', 'continentid', 'regionid', 'countryid', 'cityid', 'attractiontypeid']
-X = df_clean[features_vm]
-y = df['visitmode']
-le = LabelEncoder()
-y_encoded = le.fit_transform(y)
-X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
-clf = RandomForestClassifier()
-clf.fit(X_train, y_train)
-y_pred = clf.predict(X_test)
-st.subheader("Visit Mode Prediction Results")
-st.write("Accuracy:", accuracy_score(y_test, y_pred))
-st.text(classification_report(y_test, y_pred, target_names=le.classes_))
+    if st.button("Train Classification Model"):
+        X = df_clean[features_cls]
+        y = df_clean['rating_class']
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model = LogisticRegression()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        st.success("Classification model trained.")
+        st.write("Accuracy:", accuracy_score(y_test, y_pred))
+        st.text(classification_report(y_test, y_pred))
 
-# Predict for new user input
-st.subheader("🔍 Predict Visit Mode from User Input")
-user_input = {}
-for col in features_vm:
-    user_input[col] = st.number_input(f"{col}", min_value=0, value=int(df[col].median()))
-input_df = pd.DataFrame([user_input])
-predicted_mode = le.inverse_transform(clf.predict(input_df))[0]
-st.success(f"Predicted Visit Mode: {predicted_mode}")
+# ---------- RECOMMENDATION ----------
+elif page == "Recommendation":
+    st.title("🎯 Attraction Recommendations")
 
-# ---------- Personalized Recommendations ----------
-st.header("🎯 Personalized Attraction Recommendations")
-user_region = st.selectbox("Select Region ID", df['regionid'].unique())
-user_attraction_type = st.selectbox("Select Attraction Type ID", df['attractiontypeid'].unique())
-recommended = df[
-    (df['regionid'] == user_region) &
-    (df['attractiontypeid'] == user_attraction_type)
-].groupby('attraction').size().reset_index(name='count').sort_values(by='count', ascending=False).head(5)
-st.subheader("Top Recommended Attractions")
-st.dataframe(recommended)
+    st.subheader("🔹 Based on Region and Attraction Type")
+    region_id = st.selectbox("Select Region", sorted(df['regionid'].unique()))
+    type_id = st.selectbox("Select Attraction Type", sorted(df['attractiontypeid'].unique()))
 
-# ---------- Similar Attractions ----------
-st.header("📌 Similar Attractions using KNN")
-attraction_input = st.selectbox("Select attraction to find similar ones:", df['attraction'].unique())
-if st.button("Find Similar Attractions"):
+    recs = df[(df['regionid'] == region_id) & (df['attractiontypeid'] == type_id)]
+    top = recs['attraction'].value_counts().head(5).reset_index()
+    top.columns = ['Attraction', 'Count']
+    st.dataframe(top)
+
+    st.subheader("🔹 Similar Attractions (KNN)")
+    selected_attraction = st.selectbox("Choose an Attraction", df['attraction'].unique())
     pivot = df.pivot_table(index='attraction', columns='userid', values='rating').fillna(0)
     model_knn = NearestNeighbors(metric='cosine', algorithm='brute')
     model_knn.fit(pivot)
-    dist, idx = model_knn.kneighbors(pivot.loc[attraction_input].values.reshape(1, -1), n_neighbors=6)
-    st.subheader("Similar Attractions:")
+    dist, idx = model_knn.kneighbors(pivot.loc[selected_attraction].values.reshape(1, -1), n_neighbors=6)
+    st.write("Similar Attractions:")
     for i in range(1, len(idx[0])):
         st.write(f"{i}. {pivot.index[idx[0][i]]}")
 
+    st.subheader("🔮 Future Rating Prediction Based on User Inputs")
 
-# ---------- Future Rating Prediction ----------
-st.header("🔮 Future Rating Prediction Based on User Inputs")
+    with st.form("predict_rating_form"):
+        st.markdown("Enter values to predict rating for a future visit:")
+        future_visityear = st.number_input("Visit Year", min_value=2000, max_value=2030, value=2025)
+        future_visitmonth = st.selectbox("Visit Month", list(range(1, 13)))
+        future_visitmode = st.selectbox("Visit Mode", df['visitmode'].unique())
+        future_attraction = st.selectbox("Attraction", df['attraction'].unique())
+        future_typeid = st.selectbox("Attraction Type ID", sorted(df['attractiontypeid'].unique()))
+        submitted = st.form_submit_button("Predict Future Rating")
 
-# Input fields for user to predict future rating
-with st.form("predict_rating_form"):
-    st.subheader("Enter details to predict rating:")
-    visityear = st.number_input("Visit Year", min_value=2000, max_value=2030, value=2024)
-    visitmonth = st.selectbox("Visit Month", list(range(1, 13)))
-    visitmode = st.selectbox("Visit Mode", df['visitmode'].unique())
-    attraction = st.selectbox("Attraction", df['attraction'].unique())
-    attractiontypeid = st.selectbox("Attraction Type ID", sorted(df['attractiontypeid'].unique()))
+        if submitted:
+            try:
+                visitmode_encoded = LabelEncoder().fit(df['visitmode']).transform([future_visitmode])[0]
+                attraction_encoded = LabelEncoder().fit(df['attraction']).transform([future_attraction])[0]
+                input_df = pd.DataFrame([{
+                    'visityear': future_visityear,
+                    'visitmonth': future_visitmonth,
+                    'visitmode': visitmode_encoded,
+                    'attraction': attraction_encoded,
+                    'attractiontypeid': future_typeid
+                }])
+                X = df_clean[['visityear', 'visitmonth', 'visitmode', 'attraction', 'attractiontypeid']]
+                y = df_clean['rating']
+                future_model = RandomForestRegressor()
+                future_model.fit(X, y)
+                prediction = future_model.predict(input_df)[0]
+                st.success(f"🎯 Predicted Rating: {prediction:.2f}")
+            except ValueError:
+                st.error("❌ Error: Please select values that were seen in the original dataset.")
 
-    submitted = st.form_submit_button("Predict Rating")
 
-    if submitted:
-        # Encode categorical features
-        visitmode_encoded = LabelEncoder().fit(df['visitmode']).transform([visitmode])[0]
-        attraction_encoded = LabelEncoder().fit(df['attraction']).transform([attraction])[0]
+# ---------- INSIGHTS PAGE ----------
+elif page == "Insights":
+    st.title("📌 Insights and Recommendations")
 
-        # Prepare input for prediction
-        input_data = pd.DataFrame([{
-            'visityear': visityear,
-            'visitmonth': visitmonth,
-            'visitmode': visitmode_encoded,
-            'attraction': attraction_encoded,
-            'attractiontypeid': attractiontypeid
-        }])
+    st.subheader("❌ Common Patterns in Low Ratings")
+    low_rating_df = df[df['rating'] <= 2]
 
-        # Train model on entire cleaned dataset
-        X = df_clean[['visityear', 'visitmonth', 'visitmode', 'attraction', 'attractiontypeid']]
-        y = df_clean['rating']
-        model = RandomForestRegressor()
-        model.fit(X, y)
+    col1, col2 = st.columns(2)
 
-        predicted_rating = model.predict(input_data)[0]
-        st.success(f"🎯 Predicted Rating: {predicted_rating:.2f}")
+    with col1:
+        st.write("Low Ratings by Visit Month")
+        st.bar_chart(low_rating_df['visitmonth'].value_counts())
+
+    with col2:
+        st.write("Low Ratings by Attraction Type")
+        st.bar_chart(low_rating_df['attractiontypeid'].value_counts())
+
+    st.write("Low Ratings by Visit Mode")
+    st.bar_chart(low_rating_df['visitmode'].value_counts())
+
+    st.write("Top 5 Attractions with Most Low Ratings")
+    low_attractions = low_rating_df['attraction'].value_counts().head(5)
+    st.dataframe(low_attractions)
+
+    st.info("""
+    🔍 **Suggestions to Improve Ratings:**
+    - Focus on improving visitor experience during summer months (May–June)
+    - Enhance interactivity and engagement in attraction type ID 3 and 5
+    - Offer group packages or guided options to solo travelers
+    - Investigate and address common complaints in Region ID 2 and 4
+    """)
